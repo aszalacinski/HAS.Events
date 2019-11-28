@@ -21,17 +21,16 @@ namespace HAS.Events
             ILogger log,
             ExecutionContext context)
         {
-            var processingEventName = "mpy-registration-complete";
+            var processingEventName = "NewUserRegistered";
 
-            var processingEnvironment = Environment.GetEnvironmentVariable("MPY:IdentityServer:RegistrationEventSvc:Environment");
+            var processingEnvironment = Environment.GetEnvironmentVariable("MPY.IdentityServer.RegistrationEventSvc.Environment");
 
-            // deserialize the object
+            // deserialize the message on queue
             var regObj = JsonConvert.DeserializeObject<RegisterNewUserMsg>(myQueueItem);
 
-            // build service to send post request to API
-            // service to service call
-
-            var disco = await _authClient.GetDiscoveryDocumentAsync(Environment.GetEnvironmentVariable("MPY:IdentityServer:Authority"));
+            // get auth discovery document... needed to get token endpoints
+            var disco = await _authClient.GetDiscoveryDocumentAsync(Environment.GetEnvironmentVariable("MPY.IdentityServer.Authority"));
+            
             if (disco.IsError)
             {
                 log.LogError(disco.Error);
@@ -39,48 +38,38 @@ namespace HAS.Events
             }
             else
             {
-                // get a request token using requestclientcredentialstokenasync
-                // pass in discovery tokenendpoint
-                // pass in clientid
-                var clientId = Environment.GetEnvironmentVariable("MPY:IdentityServer:RegistrationEventSvc:ClientId");
-                // pass in secret
-                var secret = Environment.GetEnvironmentVariable("MPY:IdentityServer:RegistrationEventSvc:ClientSecret");
-                // pass in allowed scope
-                var scopes = Environment.GetEnvironmentVariable("MPY:IdentityServer:RegistrationEventSvc:Scopes");
-
+                // get a request token from auth server using requestclientcredentialstokenasync
                 var tokenResponse = await _authClient.RequestClientCredentialsTokenAsync(new ClientCredentialsTokenRequest
                 {
+                    // pass in discovery tokenendpoint
                     Address = disco.TokenEndpoint,
-                    ClientId = clientId,
-                    ClientSecret = secret,
-                    Scope = scopes
+                    // pass in clientid
+                    ClientId = Environment.GetEnvironmentVariable("MPY.IdentityServer.RegistrationEventSvc.ClientId"),
+                    // pass in secret
+                    ClientSecret = Environment.GetEnvironmentVariable("MPY.IdentityServer.RegistrationEventSvc.ClientSecret"),
+                    // pass in allowed scope
+                    Scope = Environment.GetEnvironmentVariable("MPY.IdentityServer.RegistrationEventSvc.Scopes")
                 });
 
                 if (tokenResponse.IsError)
                 {
                     log.LogError(tokenResponse.Error);
-                    return EventLog.Create(processingEventName, disco.Error, regObj, 400, processingEnvironment).ToJson();
+                    return EventLog.Create(processingEventName, tokenResponse.Error, regObj, 400, processingEnvironment).ToJson();
                 }
                 else
                 {
-                    log.LogDebug(tokenResponse.AccessToken);
-
                     // using the received token
-                    // call the POST profile api, passing in the proper body
                     // set the token as a Bearer token
                     _profileClient.SetBearerToken(tokenResponse.AccessToken);
-
-                    var profileUri = Environment.GetEnvironmentVariable("MPY:API:Profile:Authority");
-
-                    var response = await _profileClient.PostAsJsonAsync<RegisterNewUserMsg>($"{profileUri}", regObj);
+                    
+                    // call the POST profile api, passing in the proper body
+                    var response = await _profileClient.PostAsJsonAsync<RegisterNewUserMsg>($"{Environment.GetEnvironmentVariable("MPY.API.Profile.Authority")}", regObj);
 
                     var content = await response.Content.ReadAsStringAsync();
 
                     var evLogObj = EventLog.Create(processingEventName, content, regObj, (int)response.StatusCode, processingEnvironment);
                     
-                    var fResponse = evLogObj.ToJson();
-
-                    return fResponse;
+                    return evLogObj.ToJson();
                 }
             }
         }
