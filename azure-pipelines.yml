@@ -9,27 +9,51 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+variables:
+  buildConfiguration: 'Release'
+
 steps:
-- script: |
-    dotnet restore
-    dotnet build --configuration Release
+#- script: |
+#    dotnet restore
+#    dotnet build --configuration Release
+#- task: DotNetCoreCLI@2
+#  inputs:
+#    command: 'publish'
+#    publishWebProjects: false
+#    projects: '*.csproj'
+#    arguments: '--configuration Release --output publish_output'
+#- task: ArchiveFiles@2
+#  displayName: "Archive files"
+#  inputs:
+#    rootFolderOrFile: "$(System.DefaultWorkingDirectory)/publish_output"
+#    includeRootFolder: false
+#    archiveFile: "$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip"
+
+#- task: PublishBuildArtifacts@1
+#  inputs:
+#    PathtoPublish: '$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip'
+#    ArtifactName: 'HAS.Events'
+#    publishLocation: 'Container'
+
 - task: DotNetCoreCLI@2
   inputs:
-    command: publish
-    arguments: '--configuration Release --output publish_output'
-    projects: '*.csproj'
-    publishWebProjects: false
-    modifyOutputPath: true
-    zipAfterPublish: false
-- task: ArchiveFiles@2
-  displayName: "Archive files"
+    command: 'restore'
+    feedsToUse: 'select'
+    vstsFeed: '5b1d3f53-8c34-47be-97da-d20b2bfbb46a'
+- task: DotNetCoreCLI@2
   inputs:
-    rootFolderOrFile: "$(System.DefaultWorkingDirectory)/publish_output"
-    includeRootFolder: false
-    archiveFile: "$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip"
-- task: PublishBuildArtifacts@1
+    command: 'build'
+    projects: '**/*.csproj'
+    arguments: '--configuration Release'
+- task: DotNetCoreCLI@2
   inputs:
-    PathtoPublish: '$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip'
-    ArtifactName: 'HAS.Events'
-    publishLocation: 'Container'
-
+    command: 'publish'
+    publishWebProjects: true
+    arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+    zipAfterPublish: True
+    
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Pipeline.Workspace)'
+    artifact: 'HAS.Events'
+    publishLocation: 'pipeline'
