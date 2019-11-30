@@ -16,7 +16,7 @@ namespace HAS.Events
         [FunctionName("OnMPYRegisterCreateMPYProfile")]
         [return: Queue("log-event-mpy")]
         public static async Task<string> Run(
-            [QueueTrigger("mpy-registration-complete", 
+            [QueueTrigger("new-user-registered", 
             Connection = "AzureWebJobsStorage")]string myQueueItem,
             ILogger log,
             ExecutionContext context)
